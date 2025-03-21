@@ -11,4 +11,11 @@
     "express": "^4.17.1",
     "youtube-dl-exec": "^2.0.0"
   }
+  {
+  "scripts": {
+    "start": "node server.js",
+    "postinstall": "pip install yt-dlp"
+  }
+}
+
 }
