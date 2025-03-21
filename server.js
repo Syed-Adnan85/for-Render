@@ -1,31 +1,26 @@
 const express = require('express');
 const { exec } = require('child_process');
-const path = require('path');
 const cors = require('cors');
 
-const app = express(); // ✅ Initialize 'app' BEFORE using it
-const port = process.env.PORT || 3000; // ✅ Use dynamic port for deployment
+const app = express();
+const port = process.env.PORT || 3000;
 
-app.use(cors()); // ✅ Move 'cors' AFTER 'app' is initialized
+app.use(cors());
+app.use(express.json()); // ✅ Add JSON parsing for API requests
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 app.post('/download', (req, res) => {
     const videoURL = req.body.url;
     if (!videoURL) {
-        return res.status(400).send('URL is required');
+        return res.status(400).json({ error: 'URL is required' });
     }
 
     const command = `npx yt-dlp -j "${videoURL}"`;
 
     exec(command, (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error fetching video info:', stderr);
-            return res.status(400).send('Error fetching video info. Please check the URL and try again.');
+        if (error || stderr) {
+            console.error('Error fetching video info:', stderr || error.message);
+            return res.status(500).json({ error: 'Error fetching video info. Please check the URL and try again.' });
         }
 
         try {
@@ -43,7 +38,7 @@ app.post('/download', (req, res) => {
 
         } catch (parseError) {
             console.error('Error parsing video info:', parseError);
-            res.status(500).send('Error parsing video info');
+            res.status(500).json({ error: 'Error parsing video info' });
         }
     });
 });
@@ -51,4 +46,3 @@ app.post('/download', (req, res) => {
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
-
