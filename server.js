@@ -1,12 +1,18 @@
 const express = require('express');
 const { exec } = require('child_process');
+const path = require('path');
 const cors = require('cors');
 
-const app = express();
-const port = process.env.PORT || 3000;
+const app = express(); // ✅ Initialize 'app' BEFORE using it
+const port = process.env.PORT || 3000; // ✅ Use dynamic port for deployment
 
-app.use(cors());
+app.use(cors()); // ✅ Move 'cors' AFTER 'app' is initialized
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 app.post('/download', (req, res) => {
     const videoURL = req.body.url;
@@ -14,8 +20,7 @@ app.post('/download', (req, res) => {
         return res.status(400).send('URL is required');
     }
 
-    const command = process.platform === 'win32' ? 
-        `yt-dlp.exe -j "${videoURL}"` : `./yt-dlp -j "${videoURL}"`;
+    const command = `npx yt-dlp -j "${videoURL}"`;
 
     exec(command, (error, stdout, stderr) => {
         if (error) {
@@ -46,3 +51,4 @@ app.post('/download', (req, res) => {
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
+
