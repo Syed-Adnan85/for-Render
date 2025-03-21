@@ -1,18 +1,12 @@
 const express = require('express');
 const { exec } = require('child_process');
-const path = require('path');
 const cors = require('cors');
 
-const app = express(); // ✅ Initialize 'app' BEFORE using it
-const port = process.env.PORT || 3000; // ✅ Use dynamic port for deployment
+const app = express();
+const port = process.env.PORT || 3000;
 
-app.use(cors()); // ✅ Move 'cors' AFTER 'app' is initialized
+app.use(cors());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 app.post('/download', (req, res) => {
     const videoURL = req.body.url;
