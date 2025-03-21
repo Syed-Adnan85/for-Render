@@ -4,18 +4,13 @@
   "description": "A simple online video downloader",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "pip install yt-dlp"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.17.1",
     "youtube-dl-exec": "^2.0.0"
   }
-  {
-  "scripts": {
-    "start": "node server.js",
-    "postinstall": "pip install yt-dlp"
-  }
 }
 
-}
