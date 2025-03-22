@@ -1,55 +1,81 @@
 const express = require("express");
-const { exec } = require("child_process");
 const cors = require("cors");
+const { exec } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = 5000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// ✅ Define the full path to yt-dlp inside the Render virtual environment
-const ytDlpPath = "/opt/render/project/.venv/bin/yt-dlp";
+const DOWNLOAD_DIR = path.join(__dirname, "downloads");
+if (!fs.existsSync(DOWNLOAD_DIR)) {
+    fs.mkdirSync(DOWNLOAD_DIR);
+}
 
-app.post("/download", (req, res) => {
-    const videoURL = req.body.url;
+// API Home Route
+app.get("/", (req, res) => {
+    res.json({ message: "Video Downloader API is running!" });
+});
 
-    if (!videoURL) {
-        return res.status(400).json({ error: "URL is required" });
+// Video Download Route
+app.get("/download", (req, res) => {
+    const videoUrl = req.query.url;
+    const quality = req.query.quality || "best";
+
+    if (!videoUrl) {
+        return res.status(400).json({ error: "Missing video URL" });
     }
 
-    // ✅ Use the full path for yt-dlp to prevent "No versions available" error
-    const command = `${ytDlpPath} -j "${videoURL}"`;
+    const outputFilePath = path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s");
+    const command = `yt-dlp -f "${quality}" -o "${outputFilePath}" "${videoUrl}"`;
 
     exec(command, (error, stdout, stderr) => {
-        if (error || stderr) {
-            console.error("Error fetching video info:", stderr || error.message);
-            return res.status(500).json({ error: "Error fetching video info. Please check the URL and try again." });
+        if (error) {
+            console.error(`Error: ${stderr}`);
+            return res.status(500).json({ error: "Download failed", details: stderr });
         }
 
-        try {
-            const info = JSON.parse(stdout);
-            const formats = info.formats
-                ? info.formats.map((format) => ({
-                      quality: format.format_note || "Unknown",
-                      url: format.url,
-                  }))
-                : [];
+        // Find the most recently downloaded file
+        const files = fs.readdirSync(DOWNLOAD_DIR);
+        const downloadedFile = files.length > 0 ? files[files.length - 1] : null;
 
-            res.json({
-                title: info.title || "Unknown Title",
-                thumbnail: info.thumbnail || null,
-                formats,
-            });
-        } catch (parseError) {
-            console.error("Error parsing video info:", parseError);
-            res.status(500).json({ error: "Error parsing video info" });
+        if (!downloadedFile) {
+            return res.status(500).json({ error: "File not found after download" });
         }
+
+        res.json({
+            message: "Download complete!",
+            file: downloadedFile,
+            path: `/downloads/${downloadedFile}`,
+            download_url: `http://localhost:${PORT}/downloads/${encodeURIComponent(downloadedFile)}`,
+            stream_url: `http://localhost:${PORT}/stream?file=${encodeURIComponent(downloadedFile)}`
+        });
     });
 });
 
-app.listen(port, () => {
-    console.log(`✅ Server running on port ${port}`);
+// Stream Video Route (for playing in the browser)
+app.get("/stream", (req, res) => {
+    const fileName = req.query.file;
+    if (!fileName) {
+        return res.status(400).json({ error: "File name is required" });
+    }
+
+    const filePath = path.join(DOWNLOAD_DIR, fileName);
+    
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "File not found" });
+    }
+
+    res.sendFile(filePath);
+});
+
+// Serve downloaded files
+app.use('/downloads', express.static(DOWNLOAD_DIR));
+
+// Start Server
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
 });
