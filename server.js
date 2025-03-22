@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
@@ -18,6 +18,34 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
 // API Home Route
 app.get("/", (req, res) => {
     res.json({ message: "Video Downloader API is running!" });
+});
+
+// Fetch Available Video Qualities
+app.get("/get-qualities", (req, res) => {
+    const videoUrl = req.query.url;
+    if (!videoUrl) {
+        return res.status(400).json({ error: "Missing video URL" });
+    }
+
+    const command = `yt-dlp -F "${videoUrl}"`;
+
+    exec(command, (error, stdout, stderr) => {
+        if (error) {
+            return res.status(500).json({ error: "Failed to fetch qualities", details: stderr });
+        }
+
+        const qualities = stdout.split("\n")
+            .filter(line => line.match(/^\d+/)) // Extract lines with format info
+            .map(line => {
+                const parts = line.trim().split(/\s+/);
+                return {
+                    format_id: parts[0],
+                    quality: parts.slice(1).join(" ") // Merge the remaining parts as quality info
+                };
+            });
+
+        res.json({ qualities });
+    });
 });
 
 // Video Download Route
@@ -46,12 +74,14 @@ app.get("/download", (req, res) => {
             return res.status(500).json({ error: "File not found after download" });
         }
 
+        const serverUrl = `${req.protocol}://${req.get("host")}`;
+
         res.json({
             message: "Download complete!",
             file: downloadedFile,
             path: `/downloads/${downloadedFile}`,
-            download_url: `http://localhost:${PORT}/downloads/${encodeURIComponent(downloadedFile)}`,
-            stream_url: `http://localhost:${PORT}/stream?file=${encodeURIComponent(downloadedFile)}`
+            download_url: `${serverUrl}/downloads/${encodeURIComponent(downloadedFile)}`,
+            stream_url: `${serverUrl}/stream?file=${encodeURIComponent(downloadedFile)}`
         });
     });
 });
