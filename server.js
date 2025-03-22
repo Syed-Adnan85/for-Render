@@ -20,31 +20,38 @@ app.get("/", (req, res) => {
     res.json({ message: "Video Downloader API is running!" });
 });
 
-// Fetch Available Video Qualities
+// Fetch Available Video Qualities along with Title & Thumbnail
 app.get("/get-qualities", (req, res) => {
     const videoUrl = req.query.url;
     if (!videoUrl) {
         return res.status(400).json({ error: "Missing video URL" });
     }
 
-    const command = `yt-dlp -F "${videoUrl}"`;
+    const command = `yt-dlp --dump-json "${videoUrl}"`;
 
     exec(command, (error, stdout, stderr) => {
         if (error) {
-            return res.status(500).json({ error: "Failed to fetch qualities", details: stderr });
+            return res.status(500).json({ error: "Failed to fetch video info", details: stderr });
         }
 
-        const qualities = stdout.split("\n")
-            .filter(line => line.match(/^\d+/)) // Extract lines with format info
-            .map(line => {
-                const parts = line.trim().split(/\s+/);
-                return {
-                    format_id: parts[0],
-                    quality: parts.slice(1).join(" ") // Merge the remaining parts as quality info
-                };
+        try {
+            const info = JSON.parse(stdout);
+            const formats = info.formats ? info.formats.map(format => ({
+                format_id: format.format_id,
+                quality: format.format_note,
+                url: format.url
+            })) : [];
+
+            res.json({
+                title: info.title,
+                thumbnail: info.thumbnail,
+                formats
             });
 
-        res.json({ qualities });
+        } catch (parseError) {
+            console.error("Error parsing video info:", parseError);
+            res.status(500).send("Error parsing video info");
+        }
     });
 });
 
@@ -57,8 +64,9 @@ app.get("/download", (req, res) => {
         return res.status(400).json({ error: "Missing video URL" });
     }
 
-    const outputFilePath = path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s");
-    const command = `yt-dlp -f "${quality}" -o "${outputFilePath}" "${videoUrl}"`;
+    const uniqueName = `${Date.now()}-%(title)s.%(ext)s`;
+    const outputFilePath = path.join(DOWNLOAD_DIR, uniqueName);
+    const command = `yt-dlp -f "${quality}" --write-info-json -o "${outputFilePath}" "${videoUrl}"`;
 
     exec(command, (error, stdout, stderr) => {
         if (error) {
@@ -74,10 +82,23 @@ app.get("/download", (req, res) => {
             return res.status(500).json({ error: "File not found after download" });
         }
 
+        // Read metadata file
+        const infoFile = downloadedFile.replace(/\.(mp4|mkv|webm|avi|flv|mov)$/, ".info.json");
+        let title = "Unknown Title";
+        let thumbnail = null;
+
+        if (fs.existsSync(path.join(DOWNLOAD_DIR, infoFile))) {
+            const infoData = JSON.parse(fs.readFileSync(path.join(DOWNLOAD_DIR, infoFile), "utf8"));
+            title = infoData.title || title;
+            thumbnail = infoData.thumbnail || thumbnail;
+        }
+
         const serverUrl = `${req.protocol}://${req.get("host")}`;
 
         res.json({
             message: "Download complete!",
+            title,
+            thumbnail,
             file: downloadedFile,
             path: `/downloads/${downloadedFile}`,
             download_url: `${serverUrl}/downloads/${encodeURIComponent(downloadedFile)}`,
